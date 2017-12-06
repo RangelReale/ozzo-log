@@ -2,20 +2,19 @@
 // Use of this source code is governed by a MIT-style
 // license that can be found in the LICENSE file.
 
-package log_test
+package log
 
 import (
 	"io"
 	"testing"
 
 	"github.com/go-ozzo/ozzo-config"
-	"github.com/go-ozzo/ozzo-log"
 )
 
 func TestNewLogger(t *testing.T) {
-	logger := log.NewLogger()
-	if logger.MaxLevel != log.LevelDebug {
-		t.Errorf("NewLogger().MaxLevel = %v, expected %v", logger.MaxLevel, log.LevelDebug)
+	logger := NewLogger()
+	if logger.MaxLevel != LevelDebug {
+		t.Errorf("NewLogger().MaxLevel = %v, expected %v", logger.MaxLevel, LevelDebug)
 	}
 	if logger.Category != "app" {
 		t.Errorf("NewLogger().Category = %v, expected %v", logger.Category, "app")
@@ -26,10 +25,10 @@ func TestNewLogger(t *testing.T) {
 }
 
 func TestGetLogger(t *testing.T) {
-	formatter := func(*log.Logger, *log.Entry) string {
+	formatter := func(*Logger, *Entry) string {
 		return "test"
 	}
-	logger := log.NewLogger()
+	logger := NewLogger()
 	logger1 := logger.GetLogger("testing")
 	if logger1.Category != "testing" {
 		t.Errorf("logger1.Category = %v, expected %v", logger1.Category, "testing")
@@ -44,7 +43,7 @@ func TestGetLogger(t *testing.T) {
 }
 
 type MemoryTarget struct {
-	entries []*log.Entry
+	entries []*Entry
 	open    bool
 	ready   chan bool
 	Option1 string
@@ -53,11 +52,11 @@ type MemoryTarget struct {
 
 func (m *MemoryTarget) Open(io.Writer) error {
 	m.open = true
-	m.entries = make([]*log.Entry, 0)
+	m.entries = make([]*Entry, 0)
 	return nil
 }
 
-func (m *MemoryTarget) Process(e *log.Entry) {
+func (m *MemoryTarget) Process(e *Entry) {
 	if e == nil {
 		m.ready <- true
 	} else {
@@ -70,7 +69,7 @@ func (t *MemoryTarget) Close() {
 }
 
 func TestLoggerLog(t *testing.T) {
-	logger := log.NewLogger()
+	logger := NewLogger()
 	target := &MemoryTarget{
 		ready: make(chan bool, 0),
 	}
@@ -84,7 +83,7 @@ func TestLoggerLog(t *testing.T) {
 		t.Errorf("target.open = %v, expected %v", target.open, true)
 	}
 
-	logger.Log(log.LevelInfo, "t0: %v", 1)
+	logger.Log(LevelInfo, "t0: %v", 1)
 	logger.Debug("t1: %v", 2)
 	logger.Info("t2")
 	logger.Warning("t3")
@@ -143,13 +142,13 @@ func TestLoggerConfig(t *testing.T) {
 	c.Register("memory2", func() *MemoryTarget {
 		return &MemoryTarget{Option2: true}
 	})
-	logger := log.NewLogger()
+	logger := NewLogger()
 
 	if err := c.Configure(logger, "Logger"); err != nil {
 		t.Errorf("config.Configure(logger): %v", err)
 	}
-	if logger.MaxLevel != log.LevelCritical {
-		t.Errorf("logger.MaxLevel = %v, expected %v", logger.MaxLevel, log.LevelCritical)
+	if logger.MaxLevel != LevelCritical {
+		t.Errorf("logger.MaxLevel = %v, expected %v", logger.MaxLevel, LevelCritical)
 	}
 	if logger.Category != "app2" {
 		t.Errorf("logger.Category = %v, expected %v", logger.Category, "app2")
@@ -166,5 +165,38 @@ func TestLoggerConfig(t *testing.T) {
 	}
 	if m2.Option1 != "xyz" || m2.Option2 != true {
 		t.Errorf("m2.Option1 = %v, Option2 = %v, expected %v and %v", m2.Option1, m2.Option2, "xyz", true)
+	}
+}
+
+func TestLoggerFields(t *testing.T) {
+	logger := NewLogger()
+	target := &MemoryTarget{
+		ready: make(chan bool, 0),
+	}
+	logger.Targets = append(logger.Targets, target)
+
+	logger.Open()
+
+	lfld := logger.WithFields(Fields{
+		"field1": 1,
+		"field2": 2,
+	})
+
+	lfld.Info("Test 2 fields")
+
+	logger.Close()
+
+	for _, entry := range target.entries {
+		if entry.Fields == nil {
+			t.Errorf("target.entries.Fields should not be null")
+		}
+
+		if v, ok := entry.Fields["field2"]; ok {
+			if v.(int) != 2 {
+				t.Errorf("Invalid value for field 'field2'")
+			}
+		} else {
+			t.Errorf("Field 'field2' not set in Fields")
+		}
 	}
 }

@@ -52,6 +52,9 @@ func (l Level) String() string {
 	return "Unknown"
 }
 
+// Fields is a map for custom fields or parameters
+type Fields map[string]interface{}
+
 // Entry represents a log entry.
 type Entry struct {
 	Level     Level
@@ -59,6 +62,8 @@ type Entry struct {
 	Message   string
 	Time      time.Time
 	CallStack string
+	Fields    Fields
+	Params    Fields
 
 	FormattedMessage string
 }
@@ -105,6 +110,8 @@ type Logger struct {
 	*coreLogger
 	Category  string    // the category associated with this logger
 	Formatter Formatter // message formatter
+	Fields    Fields    // custom fields
+	Params    Fields    // custom params
 }
 
 // NewLogger creates a root logger.
@@ -118,7 +125,32 @@ func NewLogger() *Logger {
 		MaxLevel:    LevelDebug,
 		Targets:     make([]Target, 0),
 	}
-	return &Logger{logger, "app", DefaultFormatter}
+	return &Logger{
+		coreLogger: logger,
+		Category:   "app",
+		Formatter:  DefaultFormatter,
+	}
+}
+
+func (l *Logger) Dup() *Logger {
+	ret := &Logger{
+		coreLogger: l.coreLogger,
+		Category:   l.Category,
+		Formatter:  l.Formatter,
+	}
+	if l.Fields != nil {
+		ret.Fields = make(Fields, 0)
+		for dn, d := range l.Fields {
+			ret.Fields[dn] = d
+		}
+	}
+	if l.Params != nil {
+		ret.Params = make(Fields, 0)
+		for dn, d := range l.Params {
+			ret.Params[dn] = d
+		}
+	}
+	return ret
 }
 
 // GetLogger creates a logger with the specified category and log formatter.
@@ -126,10 +158,50 @@ func NewLogger() *Logger {
 // The formatter, if not specified, will inherit from the calling logger.
 // It will be used to format all messages logged through this logger.
 func (l *Logger) GetLogger(category string, formatter ...Formatter) *Logger {
+	ret := l.Dup()
+	ret.Category = category
 	if len(formatter) > 0 {
-		return &Logger{l.coreLogger, category, formatter[0]}
+		ret.Formatter = formatter[0]
 	}
-	return &Logger{l.coreLogger, category, l.Formatter}
+	return ret
+}
+
+// WithField returns a logger with a single field added
+func (l *Logger) WithField(name string, value interface{}) *Logger {
+	return l.WithFields(Fields{
+		name: value,
+	})
+}
+
+// WithFields returns a logger with multiple fields added
+func (l *Logger) WithFields(fields Fields) *Logger {
+	ret := l.Dup()
+	if ret.Fields == nil {
+		ret.Fields = make(Fields, 0)
+	}
+	for dn, d := range fields {
+		ret.Fields[dn] = d
+	}
+	return ret
+}
+
+// WithParam returns a logger with a single param added
+func (l *Logger) WithParam(name string, value interface{}) *Logger {
+	return l.WithParams(Fields{
+		name: value,
+	})
+}
+
+// WithParams returns a logger with multiple params added
+func (l *Logger) WithParams(params Fields) *Logger {
+	ret := l.Dup()
+	if ret.Params == nil {
+		ret.Params = make(Fields, 0)
+	}
+	for dn, d := range params {
+		ret.Params[dn] = d
+	}
+	return ret
 }
 
 // Emergency logs a message indicating the system is unusable.
@@ -199,6 +271,18 @@ func (l *Logger) Log(level Level, format string, a ...interface{}) {
 	}
 	if l.CallStackDepth > 0 {
 		entry.CallStack = GetCallStack(3, l.CallStackDepth, l.CallStackFilter)
+	}
+	if l.Fields != nil {
+		entry.Fields = make(Fields, 0)
+		for dn, d := range l.Fields {
+			entry.Fields[dn] = d
+		}
+	}
+	if l.Params != nil {
+		entry.Params = make(Fields, 0)
+		for dn, d := range l.Params {
+			entry.Params[dn] = d
+		}
 	}
 	entry.FormattedMessage = l.Formatter(l, entry)
 	l.entries <- entry
