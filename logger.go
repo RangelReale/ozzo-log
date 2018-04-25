@@ -68,6 +68,30 @@ type Entry struct {
 	FormattedMessage string
 }
 
+func (e *Entry) Dup() *Entry {
+	ret := &Entry{
+		Level:            e.Level,
+		Category:         e.Category,
+		Message:          e.Message,
+		Time:             e.Time,
+		CallStack:        e.CallStack,
+		FormattedMessage: e.FormattedMessage,
+	}
+	if e.Fields != nil {
+		ret.Fields = make(Fields, 0)
+		for dn, d := range e.Fields {
+			ret.Fields[dn] = d
+		}
+	}
+	if e.Params != nil {
+		ret.Params = make(Fields, 0)
+		for dn, d := range e.Params {
+			ret.Params[dn] = d
+		}
+	}
+	return ret
+}
+
 // String returns the string representation of the log entry
 func (e *Entry) String() string {
 	return e.FormattedMessage
